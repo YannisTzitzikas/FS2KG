@@ -143,14 +143,14 @@ public class FileSystemToKG {
 					}
 					//System.out.println(">>>>" + typeOftoAdd);
 					
-					// Policy: Create an additional entity with suffix "_entity"
+					// Policy: Create an additional semantic entity with suffix: folder name +  "_entity"
 					//ts = "<"+file.toURI()+"_entity>"    	+
 					ts = "example:"+file.getName()+"_entity"   	+           // their id is independent of the location
 							typeOftoAdd +								    // rdfs:type triples
 							//" rdf:type " +  kg.v_subFoldersClass + ";\n" +
 							" rdfs:label  \"" + file.getName()+"_entity" + "\";" +
-							" example:moreAt "+ "<"+fix(file.toURI())+">.\n\n"; //
-					//For grouping these semantic classes under a class "SemanticNetwork"
+							" example:moreAt "+ "<"+fix(file.toURI())+">.\n\n"; //connection with the ressolvable URI of the folder
+					//For grouping these semantic classes under a class "SemanticNetwork":
 					String tsExtra ="";
 					for (String classString: subFoldersClassArray) {
 						tsExtra += classString + " rdfs:subClassOf example:SemanticNetwork .\n";
@@ -161,13 +161,13 @@ public class FileSystemToKG {
 					ts = ts + tsExtra;
 					numOfEntities++;
 					
-					try { // for provenance inside the ttl file
+					try { // for adding a provenance comment inside the ttl file
 						fw.write("\n#\n#  from file " + file.getAbsolutePath() +"\n");
 					} catch(Exception e) {System.out.println(e);}
 				} 
 			} 
 			
-			// default: subClassOf
+			// default mode: subClassOf of the parent folder class
 			ts += "<"+fix(file.toURI())+">"    	+
 						" rdf:type owl:Class; \n" +
 						" rdfs:label  \"" + file.getName() + "\";" +
@@ -200,7 +200,7 @@ public class FileSystemToKG {
     	// searching for a ".kg" file
     	for (File fileEntry : folder.listFiles()) {
     		if (fileEntry.getName().equals(".kg")) { // if .kg file exists, then I create such an object
-    				System.out.print("\nFound " + fileEntry.getName() + " at " + folder.getName() + ": ");
+    				//System.out.print("\nFound " + fileEntry.getName() + " at " + folder.getName() + ": ");
     				kg = new KGproperties(fileEntry.getAbsolutePath());
     				numOfdotKGfiles++;
     				
@@ -213,18 +213,18 @@ public class FileSystemToKG {
     					// if the folder contains a readme.txt file
     					for (File f1 : folder.listFiles()) {
     						if (f1.getName().toLowerCase().equals("readme.txt")) {
-    							System.out.println("Bingo (found readme to become comment) at " + folder.getName());
+    							//System.out.println("Bingo (found readme to become comment) at " + folder.getName());
     							fw.write("<"+fix(folder.toURI())+"> rdfs:comment \"" + file2String(f1)+ "\".\n\n");
     							numOfComments++;
     						}
     					}	 
     				}
     				
-    				
-    				// extra Triples 
+    			
+    				// extra Triples (in the .kg file)
     				String extraTriplesRow = kg.kgProps.getProperty("extraTriples");
-    				System.out.println(extraTriplesRow);
     				if (extraTriplesRow!=null) {
+    					//System.out.println("extraTripleFound "+ extraTriplesRow);
     					fw.write("\n#\n#  from file " + fileEntry.getAbsolutePath() +"\n");
     					String[] 	extraTriplesArray = extraTriplesRow.split(";");
     					for (String triple: extraTriplesArray) {
@@ -239,7 +239,7 @@ public class FileSystemToKG {
     	}
     	
     	    	
-    	// traversal of all entries
+    	// traversal of all file entries
         for (File fileEntry : folder.listFiles()) {
             if (fileEntry.isDirectory()) {  // if it is a subfolder
             	numOfFolders++;
@@ -256,8 +256,8 @@ public class FileSystemToKG {
             	}
             	fw.write(file2triple(fileEntry));
             	
-            	// Extraction part
-            	/* Idea:    if fileEntry.extension =.kg 	then  if exists file with the same basic name
+            	// EXTRACTIONO PART
+            	/* Idea:    if fileEntry.extension =.kg then  if exists file with the same basic name
                    	 then we should try to extract data from that file
                 */   	 
             	if (KGproperties.getFileExtension(fileEntry.getName()).equals("kg")) {  // if the current file has extension .kg
@@ -265,21 +265,17 @@ public class FileSystemToKG {
             		String basicName = KGproperties.getFileNameWithoutExtension(fileEntry.getName());
             		//System.out.println(">> I will search for a file with name " + basicName + ".*");
             		
-            		
-            		for (File fe : folder.listFiles()) {
+            		for (File fe : folder.listFiles()) { // scans all files to see if there is a file with the same basic name
             			String feBasicName = KGproperties.getFileNameWithoutExtension(fe.getName());
             			String feExtension = KGproperties.getFileExtension(fe.getName());
-            			if (feBasicName.equals(basicName) && (!feExtension.equals("kg"))) {
+            			if (feBasicName.equals(basicName) && (!feExtension.equals("kg"))) { // found such a file
                 		//if (fe.getName().equals(basicName + ".kg")) {
-                			System.out.println("Found file to extract data from " + fe.getName());
+                			System.out.println("Will try to extract data from " + fe.getName() +". ");
                 			numOfExtractionPairs++;
                 			
-                			performExtraction(fe,fileEntry); 
-                			
-                			//extraction
-                			
+                			performExtraction(fe,fileEntry);   //extraction	
                 		}
-            		} // for fidding the pair			
+            		} // for finding the pair (basic.kg  basic.xxx)			
             		
             	} // if current file has extension kg
             	
@@ -288,7 +284,9 @@ public class FileSystemToKG {
     }
     
     /**
-     * Transforms a csv file to triples
+     * Transforms a csv file to triples based on rules in the fileKG file
+     * convention CX refers to X-th column
+     * convention C0 refers to the filename 
      * @param file the file with the data
      * @param fileKG the file with the KG generation rules
      */
@@ -297,34 +295,34 @@ public class FileSystemToKG {
     	// Part A. Open the file fileKG file and read its properties	
     	KGproperties   	dkg = new KGproperties(fileKG.getAbsolutePath());
     	//dkg.showAll();
-    	int K=20; // max num of columns
-    	String[] C = new String[K];
+    	int K=20; // max num of columns. SOS=to make it constant
+    	String[] C = new String[K];  // for reading the C properties of the .kg
     	for (int i=0;i<K;i++) {
     		C[i] = dkg.kgProps.getProperty("C"+i);
-    		//System.out.println("C"+i+":"+C[i]); // to test
+    		//System.out.println("C"+i+":"+C[i]); 
     	}
-    	String R =  dkg.kgProps.getProperty("R");
+    	String R =  dkg.kgProps.getProperty("R"); // the line of the .kg file with the rules
     	String[] Rules = null; 
     	if (R!=null) {
-			Rules = R.split(";");
+			Rules = R.split(";"); // putting all read rules in an array
 		}
     	
-    	boolean isCSVfile = C[0]==null;
-    	System.out.println("Is a csv file: " + isCSVfile);
+    	boolean isCSVfile = C[0]==null; // Convention (if C[0]<>null then it refers to the filename)
+    	//System.out.println("Is a csv file: " + isCSVfile);
 		
     	// Part B. Open the data file and read its contents  (ongoing: or just its file name)
     	String[][] file2Ddata; // will store the data as a 2D array   (only file name if not a csv file)
     	if (isCSVfile) {
 	    	CSVReader fileR = new CSVReader(file.getAbsolutePath());
-			file2Ddata = fileR.readContentsAs2DArrayOfString(";", false);
+			file2Ddata = fileR.readContentsAs2DArrayOfString(";", false); // reads the CSV files as a 2D array
 	    } else { //not CSV file  (in that case only the URI of the filename is needed)
-	    	String[][] dummy = new String[1][1];
+	    	String[][] dummy = new String[1][1]; // we need space just for one value (the filename)
 	    	dummy[0][0]= "<"+fix(file.toURI())+">";
-	    	System.out.println(dummy[0][0]);
+	    	//System.out.println("C0 extracted="+dummy[0][0]);
 	    	file2Ddata = dummy;
 	    }
     	
-		// print the 2d array by row
+		// print the 2d array by row (for testing)
 		/*
 		System.out.println("--data file begin -----------------------");
 		Arrays.stream(file2Ddata)
@@ -335,17 +333,13 @@ public class FileSystemToKG {
     	
     	// Part C.  Writing the output
 		// Part C1:  Entities and their classes
-			
 		try {
-			fw.write("\n#\n#  from file " + file.getAbsolutePath() +"\n#\n");
+			fw.write("\n#\n#  from file " + file.getAbsolutePath() +"\n#\n"); // comments for provenance reasons
 			if (!isCSVfile) { 
-				 System.out.println("lala");
 				 String triple = file2Ddata[0][0] + " rdf:type " + C[0]  +".\n";
 				 fw.write(triple);
-				 System.out.println(triple);
+				 //System.out.println("FromNotCSVFile: " +triple);
 				 fw.write(C[0] + " rdfs:subClassOf example:SemanticNetwork .\n");   	 
-				 
-				 
 			 }
 			if (isCSVfile) {
 			 for (int rows=0; rows< file2Ddata.length ; rows++) {
@@ -391,7 +385,7 @@ public class FileSystemToKG {
 				 } // for rows
 			} // is csv file
 						
-		// Part C2:  Relationships   (tocheck: to eliminate some redudancies in the output)
+		// Part C2:  Creation of Relationships   (tocheck: to eliminate some redudancies in the output)
 		if (R!=null) {	
 			for (String rule: Rules ) {   // for each rule
 				//System.out.println(">>>"+rule);
@@ -407,30 +401,34 @@ public class FileSystemToKG {
 					String obj  = RuleParts[2];
 					
 					String triple = subj + " " + pred + " " + obj + ".\n";
-					System.out.println(triple);
+					//System.out.println("TripleFromNotCSVFile: " + triple);
 					fw.write(triple);
 				}
 				// application of the rules for CSV files
-				if (isCSVfile) {
+				if (isCSVfile) {  
+					//System.out.println("ROWS="+file2Ddata.length +  " LEFT-1:=" + (left-1) + " RIGHT-1:=" + (right-1) );
 					for (int rows=0; rows< file2Ddata.length ; rows++) {  // scan each line
-						String subj = "example:"+ file2Ddata[rows][left-1];
-						String pred = RuleParts[1];
+						String subj = "example:"+ file2Ddata[rows][left-1];  // the subject is a URI created with nspace "example"
+						String pred = RuleParts[1]; // the predicate is specified by the 2nd string of the rule
 						
-						boolean noNeedsPrefix =  file2Ddata[rows][right-1].substring(0, 4).equals("rdfs") ||
-												file2Ddata[rows][right-1].substring(0, 3).equals("owl"); 
-						//
-						String obj  = (noNeedsPrefix) ? file2Ddata[rows][right-1] :  "example:" + file2Ddata[rows][right-1];
+						//boolean noNeedsPrefix =  file2Ddata[rows][right-1].substring(0, 4).equals("rdfs") ||
+						//						 file2Ddata[rows][right-1].substring(0, 3).equals("owl"); 
 						
-						//String obj  = "example:" + file2Ddata[rows][right-1];
+						boolean noNeedsPrefix = isPredefinedSchemaURI(file2Ddata[rows][right-1]); // checks if the object is predefined
+						
+					
+						String obj  = (noNeedsPrefix) ? file2Ddata[rows][right-1] : 
+							                            "example:" + file2Ddata[rows][right-1];  // creates the URI of the object
 						
 						String triple = subj + " " + pred + " " + obj + ".\n";
-						//System.out.println();
+						//System.out.println("Extracted Triple: " + triple);
 						fw.write(triple);
 					}
 				}
 				
-				//Declaration of owl ObjectProperties
+				//Declaration of owl ObjectProperties if it is required
 				/*
+				E.g.
 				bakery:hasIngredient rdf:type owl:ObjectProperty ;
 				   rdfs:domain bakery:BakeryGood ;
 				   rdfs:range bakery:Ingredient .
@@ -454,6 +452,24 @@ public class FileSystemToKG {
 	    }
 		
     }
+    
+    /**
+     * Returns true if p is the name of a URI with namespace rdfs or owl
+     * @param p
+     * @return
+     */
+    static boolean isPredefinedSchemaURI(String p) {
+    	if (p.length()>=4) 
+    		if (p.substring(0, 4).equals("rdfs"))
+    			return true;
+    	
+    	if (p.length()>=3) 
+    		if (p.substring(0, 3).equals("owl"))
+    			return true;
+    	
+    	return false;
+    }
+    
     
     /**
      * Reads a file and returns its contents as a string
@@ -561,7 +577,7 @@ public class FileSystemToKG {
     }
     
     
-    public static void main(String[] args) throws URISyntaxException {
+    public static void main(String[] args) throws URISyntaxException {   	
     	System.out.println(appName);
         //String startFolder = null;  // for opening the file selection frame
     	String startFolder = "C:\\Users\\tzitzik\\Documents\\YandT\\Yannis\\My_TEACHING\\CS_561\\Software\\FStoKGtestDataFolder\\DemoFolder";
